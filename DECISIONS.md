@@ -76,3 +76,17 @@ dashboard. Or no events log — lose history.
 What I learned: Denormalization (storing a summary alongside the source 
 of truth) is a deliberate speed tradeoff, not redundancy. Senior pattern.
 
+Date: 2026-06-02
+Project: Project 3 — Cold Email Manager
+Decision: Use Tailwind CSS (overrode AG's --no-tailwind suggestion)
+Why: Phase 6 UI generators (Stitch/v0) output Tailwind by default. 
+Starting vanilla CSS now = painful conversion when feeding generated UI 
+in later. Tailwind is the Next.js standard. Decide styling now, not 
+mid-build.
+Alternative rejected: Vanilla CSS — teaches CSS fundamentals deeper, but 
+goal is ship + Phase 6 tools speak Tailwind. Learning depth lost here is 
+acceptable given the goal.
+What I learned: AI optimizes the current task; I optimize the whole 
+project. AG didn't know my Phase 6 UI plan, so it made a locally-sensible 
+but project-wrong call. The human holds cross-phase context.
+
