@@ -1,0 +1,15 @@
+# Prettier won't touch these — either generated, binary, or intentionally formatted
+node_modules/
+.next/
+out/
+dist/
+build/
+
+# Lockfile — generated, not hand-written
+package-lock.json
+
+# Markdown — Prettier can break intentional whitespace in docs
+*.md
+
+# Static assets
+public/
