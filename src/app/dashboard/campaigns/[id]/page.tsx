@@ -69,7 +69,7 @@ export default async function CampaignPage({
           description="Write your email subject and body with {variables}."
           href={`/dashboard/campaigns/${id}/template`}
           task="T6.3"
-          available={false}
+          available={true}
         />
         <SectionCard
           label="Review & Approve"
