@@ -13,6 +13,7 @@
  */
 
 import { createClient } from "@/utils/supabase/server";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 const BASE = "/dashboard/campaigns";
@@ -78,4 +79,54 @@ export async function deleteCampaign(
   if (error) redirect(`${BASE}/${id}?error=delete_failed`);
 
   redirect(BASE);
+}
+
+// ── Save template ─────────────────────────────────────────────────────────────
+
+export type SaveTemplateData = {
+  template_subject: string | null;
+  template_body: string | null;
+  ai_prompt: string | null;
+};
+
+export type SaveTemplateResult = {
+  error?: string;
+};
+
+/**
+ * Updates the template fields on a campaign.
+ *
+ * Returns a result object (not Promise<never>) — the TemplateEditor client
+ * component needs inline success/error feedback, not a page redirect.
+ *
+ * Empty strings are normalised to null so the DB is never cluttered with
+ * blank strings (consistent with the nullable schema columns).
+ */
+export async function saveTemplate(
+  campaignId: string,
+  data: SaveTemplateData,
+): Promise<SaveTemplateResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { error: "Not authenticated." };
+
+  const { error } = await supabase
+    .from("campaigns")
+    .update({
+      template_subject: data.template_subject,
+      template_body: data.template_body,
+      ai_prompt: data.ai_prompt,
+    })
+    .eq("id", campaignId)
+    .eq("user_id", user.id); // belt-and-suspenders on top of RLS
+
+  if (error) return { error: "Failed to save. Please try again." };
+
+  // Revalidate the template page so a hard-refresh shows the latest saved values
+  revalidatePath(`/dashboard/campaigns/${campaignId}/template`);
+
+  return {};
 }
