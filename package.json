@@ -26,6 +26,7 @@
     "eslint-config-next": "16.2.7",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.8.3",
+    "supabase": "^2.105.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

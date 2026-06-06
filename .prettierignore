@@ -13,3 +13,6 @@ package-lock.json
 
 # Static assets
 public/
+
+# Supabase CLI auto-generated files — not hand-written
+supabase/.temp/
