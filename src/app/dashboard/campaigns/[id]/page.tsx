@@ -62,7 +62,7 @@ export default async function CampaignPage({
           description="Import leads from a CSV file."
           href={`/dashboard/campaigns/${id}/leads`}
           task="T6.2"
-          available={false}
+          available={true}
         />
         <SectionCard
           label="Template"
