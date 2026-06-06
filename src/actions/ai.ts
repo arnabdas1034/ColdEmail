@@ -14,7 +14,6 @@
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
 import { createAnthropicClient } from "@/lib/anthropic";
-import type { Lead } from "@/types/db";
 
 const MODEL = "claude-sonnet-4-6";
 
@@ -28,12 +27,20 @@ export type GenerateOpenersResult = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Minimum lead fields required to build the AI prompt
+type LeadMeta = {
+  id: string;
+  name: string | null;
+  company: string | null;
+  role: string | null;
+};
+
 /**
  * Interpolates the campaign's ai_prompt template with the lead's data.
  * Missing fields fall back to empty string so the prompt still makes
  * sense — Claude handles sparse data gracefully.
  */
-function buildPrompt(aiPrompt: string, lead: Lead): string {
+function buildPrompt(aiPrompt: string, lead: LeadMeta): string {
   return aiPrompt
     .replace(/{name}/g, lead.name ?? "")
     .replace(/{company}/g, lead.company ?? "")
@@ -95,7 +102,7 @@ export async function generateOpeners(
   const anthropic = createAnthropicClient();
 
   const generationResults = await Promise.all(
-    (leads as Lead[]).map(async (lead) => {
+    (leads as LeadMeta[]).map(async (lead) => {
       try {
         const message = await anthropic.messages.create({
           model: MODEL,
@@ -144,4 +151,83 @@ export async function generateOpeners(
   revalidatePath(`/dashboard/campaigns/${campaignId}`);
 
   return { generated: successful.length, failed };
+}
+
+// ── regenerateOpener ──────────────────────────────────────────────────────────
+
+export type RegenerateOpenerResult = {
+  opener?: string;
+  error?: string;
+};
+
+/**
+ * Regenerates the AI opener for a single lead and persists the result.
+ *
+ * Returns the new opener text so LeadRow can update its controlled input
+ * immediately — no router.refresh() needed for the single-cell update.
+ */
+export async function regenerateOpener(
+  campaignId: string,
+  leadId: string,
+): Promise<RegenerateOpenerResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { error: "Not authenticated." };
+
+  const [{ data: campaign }, { data: lead }] = await Promise.all([
+    supabase
+      .from("campaigns")
+      .select("ai_prompt")
+      .eq("id", campaignId)
+      .eq("user_id", user.id)
+      .single(),
+    supabase
+      .from("leads")
+      .select("id, name, company, role")
+      .eq("id", leadId)
+      .eq("campaign_id", campaignId)
+      .eq("user_id", user.id)
+      .single(),
+  ]);
+
+  if (!campaign) return { error: "Campaign not found." };
+  if (!lead) return { error: "Lead not found." };
+
+  const aiPrompt = campaign.ai_prompt?.trim() ?? "";
+  if (!aiPrompt) return { error: "No AI prompt set." };
+
+  try {
+    const anthropic = createAnthropicClient();
+    const message = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 200,
+      messages: [
+        {
+          role: "user",
+          content:
+            buildPrompt(aiPrompt, lead as LeadMeta) +
+            "\n\nWrite only the opener sentence(s). " +
+            "No subject line, no greeting, no sign-off. " +
+            "Output only the opener text itself.",
+        },
+      ],
+    });
+
+    const block = message.content[0];
+    const opener = block.type === "text" ? block.text.trim() : null;
+    if (!opener) return { error: "Claude returned an empty response." };
+
+    await supabase
+      .from("leads")
+      .update({ ai_opener: opener })
+      .eq("id", leadId)
+      .eq("user_id", user.id);
+
+    return { opener };
+  } catch {
+    return { error: "Claude API error. Please try again." };
+  }
 }

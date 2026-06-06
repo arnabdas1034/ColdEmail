@@ -132,3 +132,37 @@ export async function importLeads(
 
   return { imported: toInsert.length, skipped };
 }
+
+// ── saveOpener ────────────────────────────────────────────────────────────────
+
+export type SaveOpenerResult = {
+  error?: string;
+};
+
+/**
+ * Persists a manually edited ai_opener for a single lead.
+ *
+ * Called from LeadRow on textarea blur when the value has changed.
+ * Empty string is normalised to null (consistent with the nullable column).
+ */
+export async function saveOpener(
+  leadId: string,
+  opener: string,
+): Promise<SaveOpenerResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { error: "Not authenticated." };
+
+  const { error } = await supabase
+    .from("leads")
+    .update({ ai_opener: opener.trim() || null })
+    .eq("id", leadId)
+    .eq("user_id", user.id);
+
+  if (error) return { error: "Failed to save opener." };
+
+  return {};
+}
