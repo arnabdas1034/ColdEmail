@@ -83,7 +83,7 @@ export default async function CampaignPage({
           description="Preview AI-personalised emails and approve the send."
           href={`/dashboard/campaigns/${id}/review`}
           task="T6.5"
-          available={false}
+          available={true}
         />
       </div>
 
