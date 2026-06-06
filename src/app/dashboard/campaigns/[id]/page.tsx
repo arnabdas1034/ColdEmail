@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { StatusBadge } from "@/components/campaigns/StatusBadge";
 import { DeleteButton } from "@/components/campaigns/DeleteButton";
+import { GenerateButton } from "@/components/ai/GenerateButton";
 import type { Campaign, CampaignStatus } from "@/types/db";
 
 export default async function CampaignPage({
@@ -14,14 +15,20 @@ export default async function CampaignPage({
 
   const supabase = await createClient();
 
-  // Run both queries in parallel — no sequential dependency between them.
-  const [{ data: raw }, { count: leadCount }] = await Promise.all([
-    supabase.from("campaigns").select("*").eq("id", id).single(),
-    supabase
-      .from("leads")
-      .select("id", { count: "exact", head: true })
-      .eq("campaign_id", id),
-  ]);
+  // Three parallel queries — no sequential dependency between them.
+  const [{ data: raw }, { count: leadCount }, { count: openersCount }] =
+    await Promise.all([
+      supabase.from("campaigns").select("*").eq("id", id).single(),
+      supabase
+        .from("leads")
+        .select("id", { count: "exact", head: true })
+        .eq("campaign_id", id),
+      supabase
+        .from("leads")
+        .select("id", { count: "exact", head: true })
+        .eq("campaign_id", id)
+        .not("ai_opener", "is", null),
+    ]);
 
   if (!raw) notFound();
 
@@ -77,6 +84,27 @@ export default async function CampaignPage({
           href={`/dashboard/campaigns/${id}/review`}
           task="T6.5"
           available={false}
+        />
+      </div>
+
+      {/* ── AI personalization ─────────────────────────────────────────── */}
+      <div className="mb-6 rounded-xl border border-gray-200 bg-white p-6">
+        <h2 className="mb-1 text-sm font-semibold text-gray-900">
+          AI Personalization
+        </h2>
+        <p className="mb-5 text-sm text-gray-500">
+          Claude writes a unique opener for each lead based on your prompt.
+          Openers are substituted for{" "}
+          <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-xs">
+            {"{ai_opener}"}
+          </code>{" "}
+          in the template body.
+        </p>
+        <GenerateButton
+          campaignId={id}
+          totalLeads={leadCount ?? 0}
+          openersCount={openersCount ?? 0}
+          hasPrompt={Boolean(campaign.ai_prompt?.trim())}
         />
       </div>
 
