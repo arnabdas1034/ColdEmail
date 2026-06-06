@@ -5,7 +5,7 @@
  * They are used as explicit type annotations and casts throughout the app
  * to prevent `any` from propagating in our own code.
  *
- * Source of truth: supabase/migrations/00001_init.sql
+ * Source of truth: supabase/migrations/ (all applied migrations)
  */
 
 // ── Status / event literal unions ────────────────────────────────────────────
@@ -38,6 +38,7 @@ export type Lead = {
   company: string | null;
   role: string | null;
   status: LeadStatus;
+  ai_opener: string | null; // added: 00003_leads_ai_opener
   created_at: string;
 };
 
