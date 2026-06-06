@@ -23,7 +23,12 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-explicit-any": "error",
 
       // Unused vars as warnings, not errors (TS already catches them at build).
-      "@typescript-eslint/no-unused-vars": "warn",
+      // argsIgnorePattern restores the recommended-preset default that was
+      // accidentally dropped when we changed the severity to "warn".
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
+      ],
 
       // Warn on console.* — reminder to remove debug logs before shipping.
       // "warn" not "error" so it never blocks a build.
