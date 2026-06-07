@@ -13,7 +13,7 @@
 export type CampaignStatus = "draft" | "sending" | "done" | "paused";
 export type LeadStatus = "pending" | "sent" | "opened" | "replied" | "bounced";
 export type EmailStatus = "scheduled" | "sent" | "failed" | "cancelled";
-export type EventType = "sent" | "opened" | "replied" | "bounced";
+export type EventType = "sent" | "opened" | "replied" | "bounced" | "failed";
 
 // ── Table row types ───────────────────────────────────────────────────────────
 

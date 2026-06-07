@@ -7,7 +7,7 @@ import { NextResponse, type NextRequest } from "next/server";
  * /auth/ must be public — the magic link lands on /auth/callback before a
  * session exists, so protecting it causes an infinite redirect loop.
  */
-const PUBLIC_PREFIXES = ["/login", "/auth/"] as const;
+const PUBLIC_PREFIXES = ["/login", "/auth/", "/api/cron/"] as const;
 
 function isPublicRoute(pathname: string): boolean {
   return PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix));

@@ -28,6 +28,7 @@
 - company       text
 - role          text
 - status        text   # pending | sent | opened | replied | bounced
+- ai_opener     text   # Claude-generated opener, substituted for {ai_opener}
 - created_at    timestamptz
 
 ### emails   (also serves as the job queue)
@@ -38,8 +39,9 @@
 - sequence_step int    # 1=initial, 2=followup1, 3=followup2
 - subject       text   # final after personalization
 - body          text   # final after personalization
-- status        text   # scheduled | sent | failed | cancelled
-- scheduled_for timestamptz   # INDEXED (cron query)
+- status        text   # scheduled | sending | sent | failed | cancelled
+- scheduled_for timestamptz   # delivery time (INDEXED with status)
+- claimed_at    timestamptz   # set by cron claim UPDATE; orphan reaper uses this
 - sent_at       timestamptz
 - resend_id     text   # Resend's email ID (for webhook matching)
 - created_at    timestamptz
@@ -48,9 +50,9 @@
 - id            uuid PK
 - email_id      uuid FK → emails.id
 - lead_id       uuid FK → leads.id
-- type          text   # sent | opened | replied | bounced
+- type          text   # sent | opened | replied | bounced | failed
 - occurred_at   timestamptz
-- raw_payload   jsonb  # full webhook data for debugging
+- raw_payload   jsonb  # full webhook data / error payload for debugging
 
 ## Relationships
 - users 1—∞ campaigns
@@ -59,10 +61,19 @@
 - emails 1—∞ events
 
 ## Indexes
-- leads.email           (reply-matching)
-- emails.scheduled_for  (cron job query)
-- emails.status         (cron job query)
+- leads.email                          (reply-matching lookup)
+- emails.(status, scheduled_for)       COMPOUND — cron query:
+                                         WHERE status='scheduled'
+                                         AND scheduled_for<=now()
+                                         ORDER BY scheduled_for
+                                         (prefix scan on status, range scan
+                                          on scheduled_for within that bucket)
 - foreign keys auto-indexed by Postgres
+
+Note: SCHEMA.md originally described two single-column indexes on
+emails.status and emails.scheduled_for. The live migration (00001)
+created one compound index — which is strictly better for the cron
+query pattern. Docs updated to match reality.
 
 ## Design notes
 - emails table = job queue: cron does 

@@ -90,3 +90,36 @@ What I learned: AI optimizes the current task; I optimize the whole
 project. AG didn't know my Phase 6 UI plan, so it made a locally-sensible 
 but project-wrong call. The human holds cross-phase context.
 
+Date: 2026-06-06
+Decision: ESLint — dropped eslint-config-next, used typescript-eslint + 
+@next/eslint-plugin-next directly
+Why: eslint-config-next forces Babel parser (next/dist/compiled/babel/
+eslint-parser) which hangs on Node 24. Plugin rules load fine without it.
+Result: Next.js rules kept, no hang, no Node downgrade. More modern pipeline.
+What I learned: Use LTS (Node 22) not latest (24) for fewer tooling bugs. 
+And: a fix with a tradeoff (lost Next rules) → interrogate if avoidable, 
+don't accept silent loss.
+
+Date: 2026-06-06
+Decision: 3 Supabase clients (browser/server/admin), not 2
+Why: App Router runs in browser + server + backend contexts. browser+server 
+use publishable key (RLS applies); admin uses secret key (bypasses RLS), 
+server-only, for cron+webhooks. Verified both keys auth against live DB.
+What I learned: Service-role key = god mode = NEVER NEXT_PUBLIC_, never in 
+UI. Connection test before deploy = isolate variables.
+
+Date: 2026-06-07
+Decision: Resend idempotency key = email row UUID on every cron send
+Why: The claim→send→mark-sent sequence is not atomic. If send succeeds but
+the follow-up UPDATE (emails→'sent') fails (DB timeout, deploy restart, etc),
+the row stays 'sending', the orphan reaper resets it to 'scheduled', and it
+gets resent — a real double-send to a real prospect. Passing the email row id
+as idempotency key (`email/<uuid>`) makes any Resend retry a no-op: Resend
+returns the original response without sending again. Kills the entire
+partial-failure double-send class at the source, at zero extra cost.
+Alternative: make claim→send→update a DB transaction. Not possible here —
+the send is an external HTTP call; Postgres transactions can't span that.
+What I learned: Distributed partial failures (external call succeeds,
+local update fails) are the hardest class of bug. The correct fix is
+idempotency at the external service, not retry logic on our side.
+
