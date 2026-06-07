@@ -6,6 +6,12 @@ import { NextResponse, type NextRequest } from "next/server";
  *
  * /auth/ must be public — the magic link lands on /auth/callback before a
  * session exists, so protecting it causes an infinite redirect loop.
+ *
+ * /api/cron/ is listed here as defence-in-depth only.  The primary guard is
+ * the matcher below, which excludes api/cron/ entirely so the middleware
+ * function never runs for those paths.  Relying solely on this prefix list
+ * is fragile: getUser() still fires and a Supabase network error could cause
+ * the request to fall through to the 307 redirect.
  */
 const PUBLIC_PREFIXES = ["/login", "/auth/", "/api/cron/"] as const;
 
@@ -80,7 +86,6 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   }
 
   // ── Authenticated user on /login → /dashboard ──────────────────────────
-  // /dashboard will 404 until Phase 6 builds it; the redirect itself is correct.
   if (user && pathname === "/login") {
     const dashboardUrl = request.nextUrl.clone();
     dashboardUrl.pathname = "/dashboard";
@@ -95,16 +100,24 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 export const config = {
   matcher: [
     /*
-     * Run on every path EXCEPT static assets.
-     * Excluded:
+     * Run on every path EXCEPT:
      *   _next/static  — compiled JS/CSS bundles
      *   _next/image   — image optimisation endpoint
      *   favicon.ico   — fetched by browsers constantly
+     *   api/cron/     — cron routes authenticate themselves via CRON_SECRET
+     *                   and must never be intercepted by session middleware.
+     *                   Trailing slash ensures only /api/cron/* is excluded;
+     *                   a future /api/cronjob route would still be matched.
+     *                   Excluding here (not just in PUBLIC_PREFIXES) ensures
+     *                   getUser() is never called on cron invocations —
+     *                   preventing both the 307-to-login on missing session
+     *                   and an unnecessary Supabase Auth network round-trip
+     *                   on every 5-minute tick.
      *   common image extensions (svg, png, jpg, jpeg, gif, webp)
      *
-     * API routes are intentionally NOT excluded — they need session refresh
-     * and will require auth checks in later phases.
+     * All other API routes remain matched — they participate in session
+     * refresh and will require auth checks as they are added.
      */
-    "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon\\.ico|api/cron/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
