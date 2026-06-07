@@ -1,0 +1,9 @@
+# Never upload local secrets — Vercel builds use dashboard-configured env vars.
+.env
+.env.local
+.env.*.local
+
+# Local-only / not needed in the build context
+.git
+node_modules
+.next

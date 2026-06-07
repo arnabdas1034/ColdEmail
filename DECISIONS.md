@@ -123,3 +123,22 @@ What I learned: Distributed partial failures (external call succeeds,
 local update fails) are the hardest class of bug. The correct fix is
 idempotency at the external service, not retry logic on our side.
 
+Date: 2026-06-07
+Decision: Drive the drip cron from GitHub Actions, not vercel.json crons
+Why: The Vercel Hobby plan only allows once-per-day cron schedules. The */5
+schedule in vercel.json was rejected at deploy-creation time with
+"Hobby accounts are limited to daily cron jobs" — which silently failed EVERY
+deploy after T6.6 (GitHub pushes and manual deploy hooks alike produced no
+deployment record, so it looked like a broken GitHub integration). Removing
+the vercel.json cron unblocks deploys; a GitHub Actions scheduled workflow
+(.github/workflows/cron-send.yml) hits the CRON_SECRET-protected endpoint
+every 5 min instead. Free, preserves the 5-min cadence the intra-day drip
+needs. Endpoint auth is unchanged — the trigger source moved, not the guard.
+Alternative: upgrade to Vercel Pro (native sub-daily crons). Deferred — no
+need to pay at v1 volume.
+What I learned: A failing deploy can masquerade as a broken integration.
+"No deployment appeared AND nothing is stuck" pointed at validation rejection
+at deploy-creation, not a queue/webhook problem — the CLI's explicit error
+message is what surfaced the true cause. Read the actual deploy error before
+theorizing about webhooks.
+

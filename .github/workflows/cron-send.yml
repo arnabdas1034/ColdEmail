@@ -1,0 +1,45 @@
+name: Drip sender cron
+
+# Why this exists instead of a Vercel cron:
+# Vercel's Hobby plan only permits once-per-day cron schedules, which rejects
+# the */5 cadence the drip sender needs (the deploy fails validation). We trigger
+# the same protected endpoint from GitHub Actions instead — free, and keeps the
+# 5-minute cadence. Swap back to a vercel.json cron if/when the project moves to Pro.
+#
+# Requires repo secret CRON_SECRET (Settings -> Secrets and variables -> Actions)
+# matching the CRON_SECRET set in Vercel's project env vars.
+
+on:
+  schedule:
+    # GitHub Actions cron is UTC and best-effort (may lag under load); fine for v1.
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+# Avoid overlapping runs piling up if a previous trigger is slow.
+concurrency:
+  group: drip-sender-cron
+  cancel-in-progress: false
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call /api/cron/send
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET repo secret is not set"
+            exit 1
+          fi
+          resp=$(curl -sS -m 30 -w '\n%{http_code}' \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "https://cold-email-rho.vercel.app/api/cron/send")
+          body=$(printf '%s' "$resp" | sed '$d')
+          code=$(printf '%s' "$resp" | tail -n1)
+          echo "HTTP $code"
+          echo "Body: $body"
+          if [ "$code" != "200" ]; then
+            echo "::error::cron endpoint returned $code (expected 200)"
+            exit 1
+          fi
