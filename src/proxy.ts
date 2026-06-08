@@ -118,6 +118,6 @@ export const config = {
      * All other API routes remain matched — they participate in session
      * refresh and will require auth checks as they are added.
      */
-    "/((?!_next/static|_next/image|favicon\\.ico|api/cron/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon\\.ico|api/cron/|api/webhooks/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
