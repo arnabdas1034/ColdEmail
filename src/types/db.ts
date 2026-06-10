@@ -13,7 +13,8 @@
 export type CampaignStatus = "draft" | "sending" | "done" | "paused";
 export type LeadStatus = "pending" | "sent" | "opened" | "replied" | "bounced";
 export type EmailStatus = "scheduled" | "sending" | "sent" | "failed" | "cancelled";
-export type EventType = "sent" | "delivered" | "opened" | "replied" | "bounced" | "complained" | "failed";
+export type EventType = "sent" | "delivered" | "opened" | "replied" | "bounced" | "complained" | "failed" | "suppressed";
+export type SuppressionReason = "unsubscribe" | "bounce" | "complaint" | "manual";
 
 // ── Table row types ───────────────────────────────────────────────────────────
 
@@ -65,4 +66,15 @@ export type Event = {
   type: EventType;
   occurred_at: string;
   raw_payload: Record<string, unknown> | null;
+};
+
+export type Suppression = {
+  id: string;
+  user_id: string;
+  email: string; // stored normalized: lower(btrim(email)); CHECK enforces it
+  reason: SuppressionReason;
+  source: string | null;
+  lead_id: string | null; // a suppressed address often has no lead in the current campaign
+  raw_payload: Record<string, unknown> | null;
+  created_at: string;
 };

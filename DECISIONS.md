@@ -142,3 +142,9 @@ at deploy-creation, not a queue/webhook problem — the CLI's explicit error
 message is what surfaced the true cause. Read the actual deploy error before
 theorizing about webhooks.
 
+Date: 2026-06-10
+Decision: Suppression list = standalone `suppressions` table keyed on (user_id, email), not a status on leads
+Why: A do-not-send address (unsubscribe/bounce/complaint) frequently has no lead row in the current campaign, so the send guard must check by address independent of any lead. Email stored normalized (lower+trim) with a CHECK enforcing it, so a forgotten normalization throws at write rather than silently creating a suppression the lookup can never match. unique(user_id,email) makes at-least-once webhook writes idempotent and indexes the guard lookup for free.
+Alternative rejected: leads.status='unsubscribed' — can't suppress an address with no lead; re-suppression across campaigns gets messy.
+What I learned: A compliance guard must key on the thing it protects (the email address), not on a related entity that may not exist.
+

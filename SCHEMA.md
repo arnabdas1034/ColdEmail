@@ -54,11 +54,26 @@
 - occurred_at   timestamptz
 - raw_payload   jsonb  # full webhook data / error payload for debugging
 
+### suppressions   (standalone do-not-send list)
+- id            uuid PK
+- user_id       uuid FK → users.id        # product hook
+- email         text   # CHECK: email = lower(btrim(email)) AND email <> '' — normalized, non-empty
+- reason        text   # CHECK: unsubscribe | bounce | complaint | manual
+- source        text   # nullable, e.g. webhook event type / 'manual'
+- lead_id       uuid FK → leads.id ON DELETE SET NULL   # nullable — suppression outlives its lead
+- raw_payload   jsonb  # full webhook payload for debugging
+- created_at    timestamptz
+- UNIQUE (user_id, email)   # idempotency key for webhook writes + send-guard lookup index
+- RLS: SELECT own + INSERT own only (auth.uid() = user_id); NO update/delete
+- GRANTS: authenticated = SELECT+INSERT only (update/delete revoked); service_role = ALL; anon = SELECT
+
 ## Relationships
 - users 1—∞ campaigns
 - campaigns 1—∞ leads (Option A: leads belong to one campaign)
 - leads 1—∞ emails (initial + follow-ups)
 - emails 1—∞ events
+- users 1—∞ suppressions
+- leads 1—∞ suppressions (nullable — a suppressed address may have no lead row)
 
 ## Indexes
 - leads.email                          (reply-matching lookup)
@@ -81,3 +96,4 @@ query pattern. Docs updated to match reality.
 - events = append-only audit log, never edited
 - leads.status = denormalized summary for fast dashboard reads
 - user_id on every table = multi-tenant product hook (single value for v1)
+- suppressions = do-not-send list; the drip sender checks it before every send
