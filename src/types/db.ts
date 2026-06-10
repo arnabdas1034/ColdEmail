@@ -12,8 +12,8 @@
 
 export type CampaignStatus = "draft" | "sending" | "done" | "paused";
 export type LeadStatus = "pending" | "sent" | "opened" | "replied" | "bounced";
-export type EmailStatus = "scheduled" | "sent" | "failed" | "cancelled";
-export type EventType = "sent" | "opened" | "replied" | "bounced" | "failed";
+export type EmailStatus = "scheduled" | "sending" | "sent" | "failed" | "cancelled";
+export type EventType = "sent" | "delivered" | "opened" | "replied" | "bounced" | "complained" | "failed";
 
 // ── Table row types ───────────────────────────────────────────────────────────
 
@@ -59,7 +59,7 @@ export type Email = {
 
 export type Event = {
   id: string;
-  email_id: string;
+  email_id: string | null; // null for inbound reply events (no outbound email row); see migration 00006
   lead_id: string;
   user_id: string;
   type: EventType;
