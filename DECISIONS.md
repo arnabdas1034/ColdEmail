@@ -148,3 +148,10 @@ Why: A do-not-send address (unsubscribe/bounce/complaint) frequently has no lead
 Alternative rejected: leads.status='unsubscribed' — can't suppress an address with no lead; re-suppression across campaigns gets messy.
 What I learned: A compliance guard must key on the thing it protects (the email address), not on a related entity that may not exist.
 
+Date: 2026-06-10
+Decision: Populate suppressions from 3 sources — inbound unsubscribe, permanent bounce, spam complaint
+Why: A do-not-send guard is only as good as what feeds it. Inbound 'unsubscribe' (subject match) -> reason='unsubscribe'. email.complained -> reason='complaint' (always; complaints are unambiguous and legally must stop sends). email.bounced -> reason='bounce' ONLY when bounce.type='Permanent' (verified vs Resend webhook schema: Permanent=hard/never-deliver, Transient=soft/may-recover, Undetermined=insufficient-info). Transient/Undetermined are NOT suppressed — blacklisting a recoverable address loses a valid lead.
+Why unsubscribe does NOT set leads.status='replied': an opt-out is not an engaged reply; counting it inflates reply rate. The send guard stops future sends via the suppression, so follow-ups stop regardless of lead status.
+Known gap: inbound match is case-sensitive (~90%); an unsubscribe from a case-mismatched sender logs a warning but isn't suppressed. Same root cause as reply-match; fix is the deferred lower(email) matching upgrade (closes both).
+What I learned: Suppress only on truly permanent signals; over- and under-suppression have asymmetric costs, so gate precisely.
+

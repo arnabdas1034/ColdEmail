@@ -175,6 +175,29 @@ export async function POST(request: NextRequest) {
         .eq("id", leadId)
         .neq("status", "replied"),
     );
+
+    // ── Suppression: permanent bounce or spam complaint → never send again ────
+    const recipient = (event.data as { to?: string[] }).to?.[0];
+    const bounceType = (event.data as { bounce?: { type?: string } }).bounce?.type;
+    const shouldSuppress =
+      eventType === "complained" ||
+      (eventType === "bounced" && bounceType === "Permanent");
+    if (shouldSuppress && recipient) {
+      // Transient/Undetermined bounces are intentionally NOT suppressed.
+      writes.push(
+        supabase.from("suppressions").upsert(
+          {
+            user_id: userId,
+            email: recipient.trim().toLowerCase(),
+            reason: eventType === "complained" ? "complaint" : "bounce",
+            source: "resend_webhook",
+            lead_id: leadId,
+            raw_payload: event as unknown as Record<string, unknown>,
+          },
+          { onConflict: "user_id,email", ignoreDuplicates: true },
+        ),
+      );
+    }
   }
   // email.delivered: event row only, no leads.status change.
 

@@ -13,7 +13,7 @@
 export type CampaignStatus = "draft" | "sending" | "done" | "paused";
 export type LeadStatus = "pending" | "sent" | "opened" | "replied" | "bounced";
 export type EmailStatus = "scheduled" | "sending" | "sent" | "failed" | "cancelled";
-export type EventType = "sent" | "delivered" | "opened" | "replied" | "bounced" | "complained" | "failed" | "suppressed";
+export type EventType = "sent" | "delivered" | "opened" | "replied" | "bounced" | "complained" | "failed" | "suppressed" | "unsubscribed";
 export type SuppressionReason = "unsubscribe" | "bounce" | "complaint" | "manual";
 
 // ── Table row types ───────────────────────────────────────────────────────────
