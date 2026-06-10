@@ -146,6 +146,9 @@ export async function POST(request: NextRequest) {
       occurred_at: new Date().toISOString(),
       raw_payload: event as unknown as Record<string, unknown>,
     });
+    // Stop-on-terminal: cancel this lead's pending follow-ups. Scoped to
+    // status='scheduled' so it's idempotent and never touches sent/sending rows.
+    await supabase.from("emails").update({ status: "cancelled" }).eq("lead_id", matched.id).eq("status", "scheduled");
     return Response.json({ ok: true, note: "unsubscribed" });
   }
 
@@ -182,6 +185,9 @@ export async function POST(request: NextRequest) {
       occurred_at: occurredAt,
       raw_payload: event as unknown as Record<string, unknown>,
     }),
+    // Stop-on-terminal: cancel this lead's pending follow-ups (scoped to
+    // status='scheduled' → idempotent, never touches sent/sending rows).
+    supabase.from("emails").update({ status: "cancelled" }).eq("lead_id", matched.id).eq("status", "scheduled"),
   ]);
 
   return Response.json({ ok: true });

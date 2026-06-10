@@ -21,6 +21,7 @@ type EmailRow = {
   user_id: string;
   subject: string | null;
   body: string | null;
+  sequence_step: number;
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -28,6 +29,12 @@ type EmailRow = {
 /** Max rows claimed per invocation. At 40 emails/day spread over 8 h, ~5 fire
  *  per 5-min window; 10 is a safe 2× ceiling. */
 const BATCH_SIZE = 10;
+
+/** Follow-up cadence: step 2 at +4 days, step 3 at +9 days after the initial sends. */
+const FOLLOWUP_PLAN: Array<{ step: number; delayDays: number; body: string }> = [
+  { step: 2, delayDays: 4, body: "Just bumping this up in case it slipped through — happy to share a quick sample whenever works." },
+  { step: 3, delayDays: 9, body: "Last note from me on this — worth a quick yes/no? No worries either way." },
+];
 
 /** claimed_at older than this is treated as an orphan (crash between claim and
  *  send). Keyed on claimed_at, not scheduled_for — scheduled_for is the
@@ -73,7 +80,7 @@ export async function GET(request: NextRequest) {
   // ── 3. Fetch candidate rows ───────────────────────────────────────────────
   const { data: candidates, error: candidatesError } = await supabase
     .from("emails")
-    .select("id, lead_id, campaign_id, user_id, subject, body")
+    .select("id, lead_id, campaign_id, user_id, subject, body, sequence_step")
     .eq("status", "scheduled")
     .lte("scheduled_for", new Date().toISOString())
     .order("scheduled_for", { ascending: true })
@@ -283,6 +290,32 @@ export async function GET(request: NextRequest) {
       ]);
 
       sent++;
+
+      if (email.sequence_step === 1) {
+        try {
+          const nowMs = Date.now();
+          const followups = FOLLOWUP_PLAN.map((f) => ({
+            lead_id: email.lead_id,
+            campaign_id: email.campaign_id,
+            user_id: email.user_id,
+            sequence_step: f.step,
+            subject: `Re: ${email.subject ?? "(no subject)"}`,
+            body: f.body,
+            status: "scheduled",
+            scheduled_for: new Date(nowMs + f.delayDays * 24 * 60 * 60 * 1000).toISOString(),
+          }));
+          const { error: followupError } = await supabase
+            .from("emails")
+            .upsert(followups, { onConflict: "lead_id,sequence_step", ignoreDuplicates: true });
+          if (followupError) {
+            console.error("[cron/send] follow-up scheduling failed (db) for email", email.id, followupError);
+          }
+        } catch (followupErr) {
+          // Initial already sent + marked 'sent'. A follow-up scheduling failure must NOT
+          // propagate to the outer catch and flip the initial to 'failed'.
+          console.error("[cron/send] follow-up scheduling threw for email", email.id, followupErr);
+        }
+      }
     } catch (err) {
       // ── Failure: mark email failed, log full error into events ─────────────
       const errorPayload: Record<string, unknown> =

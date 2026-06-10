@@ -155,3 +155,9 @@ Why unsubscribe does NOT set leads.status='replied': an opt-out is not an engage
 Known gap: inbound match is case-sensitive (~90%); an unsubscribe from a case-mismatched sender logs a warning but isn't suppressed. Same root cause as reply-match; fix is the deferred lower(email) matching upgrade (closes both).
 What I learned: Suppress only on truly permanent signals; over- and under-suppression have asymmetric costs, so gate precisely.
 
+Date: 2026-06-10
+Decision: unique(lead_id, sequence_step) on emails — one initial + one followup1 + one followup2 per lead
+Why: The follow-up engine inserts followup rows when an initial sends. The orphan-recovery path can re-process a sent initial (the send is idempotent via Resend's key, but the post-send followup insert could run twice), so followup inserts use on-conflict-do-nothing against this constraint. It also encodes the data model: one email per step per lead.
+Alternative rejected: check-before-insert in app code — race-prone, doesn't enforce the model at the DB.
+What I learned: Enforce 'one X per (Y,Z)' as a DB unique constraint; it doubles as the idempotency key for the writer.
+

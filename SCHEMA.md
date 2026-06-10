@@ -45,6 +45,7 @@
 - sent_at       timestamptz
 - resend_id     text   # Resend's email ID (for webhook matching)
 - created_at    timestamptz
+- UNIQUE (lead_id, sequence_step)   # one row per step per lead; idempotency key for follow-up creation (on conflict do nothing)
 
 ### events   (append-only history)
 - id            uuid PK
