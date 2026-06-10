@@ -94,9 +94,6 @@ export async function POST(request: NextRequest) {
   // and passes a bare address through unchanged.
   const senderEmail = extractEmail(fromRaw).trim();
 
-  // TODO(T6.8): if event.data.subject contains 'unsubscribe' (case-insensitive),
-  // add the sender to a suppression list and skip future sends. No action in v1.
-
   // ── 5. Level 1 reply-match ─────────────────────────────────────────────────
   // Exact-match lookup on leads.email so it uses idx_leads_email. Matching is
   // case-sensitive (no normalization on either side) — an accepted Level 1
@@ -116,6 +113,40 @@ export async function POST(request: NextRequest) {
       { error: "Lead lookup failed", detail: lookupError.message },
       { status: 500 },
     );
+  }
+
+  // ── Unsubscribe opt-out → feed suppression list, do NOT mark 'replied' ─────
+  // An opt-out is not an engaged reply, so short-circuit before the replied
+  // transition below. The send-path guard stops future sends via the
+  // suppression regardless of lead status.
+  const subject = (event.data as { subject?: string }).subject ?? "";
+  const isUnsubscribe = subject.toLowerCase().includes("unsubscribe");
+  if (isUnsubscribe) {
+    const matched = lead as MatchedLead | null;
+    if (!matched) {
+      console.warn("[inbound] unsubscribe from unmatched sender, not suppressed:", senderEmail);
+      return Response.json({ ok: true, note: "unsubscribe_unmatched_sender" });
+    }
+    await supabase.from("suppressions").upsert(
+      {
+        user_id: matched.user_id,
+        email: senderEmail.trim().toLowerCase(),
+        reason: "unsubscribe",
+        source: "inbound_webhook",
+        lead_id: matched.id,
+        raw_payload: event as unknown as Record<string, unknown>,
+      },
+      { onConflict: "user_id,email", ignoreDuplicates: true },
+    );
+    await supabase.from("events").insert({
+      email_id: null,
+      lead_id: matched.id,
+      user_id: matched.user_id,
+      type: "unsubscribed",
+      occurred_at: new Date().toISOString(),
+      raw_payload: event as unknown as Record<string, unknown>,
+    });
+    return Response.json({ ok: true, note: "unsubscribed" });
   }
 
   if (!lead) {

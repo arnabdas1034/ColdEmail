@@ -141,6 +141,40 @@ export async function GET(request: NextRequest) {
     ]),
   );
 
+  // ── 5b. Suppression lookup for the claimed batch ─────────────────────────
+  const normalizeEmail = (e: string) => e.trim().toLowerCase();
+  const batchUserIds = [...new Set(toSend.map((e) => e.user_id))];
+  const batchAddresses = [
+    ...new Set(
+      toSend
+        .map((e) => leadEmailMap.get(e.lead_id))
+        .filter((a): a is string => !!a)
+        .map(normalizeEmail),
+    ),
+  ];
+  const suppressedSet = new Set<string>();
+  if (batchAddresses.length > 0) {
+    const { data: suppRows, error: suppError } = await supabase
+      .from("suppressions")
+      .select("user_id, email")
+      .in("user_id", batchUserIds)
+      .in("email", batchAddresses);
+    if (suppError) {
+      // Fail CLOSED: never send when the suppression list can't be verified.
+      // Reset claimed rows so they retry next tick (don't lose them).
+      console.error("[cron/send] suppression lookup failed, aborting batch:", suppError);
+      await supabase
+        .from("emails")
+        .update({ status: "scheduled", claimed_at: null })
+        .in("id", toSend.map((e) => e.id))
+        .eq("status", "sending");
+      return Response.json({ ok: false, reason: "suppression_lookup_failed", reset: toSend.length });
+    }
+    for (const r of (suppRows ?? []) as Array<{ user_id: string; email: string }>) {
+      suppressedSet.add(`${r.user_id}|${r.email}`);
+    }
+  }
+
   // ── 6. Send each claimed email sequentially ────────────────────────────────
   // Sequential (not Promise.all) — Resend rate limit is ~2 req/s; sequential
   // ensures we never burst. Per-email try/catch isolates failures.
@@ -149,6 +183,20 @@ export async function GET(request: NextRequest) {
 
   for (const email of toSend) {
     const toAddress = leadEmailMap.get(email.lead_id);
+
+    const normalizedTo = toAddress ? normalizeEmail(toAddress) : null;
+    if (normalizedTo && suppressedSet.has(`${email.user_id}|${normalizedTo}`)) {
+      await supabase.from("emails").update({ status: "cancelled" }).eq("id", email.id);
+      await supabase.from("events").insert({
+        email_id: email.id,
+        lead_id: email.lead_id,
+        user_id: email.user_id,
+        type: "suppressed",
+        occurred_at: new Date().toISOString(),
+        raw_payload: { reason: "recipient_on_suppression_list", email: normalizedTo },
+      });
+      continue; // skip send for this row
+    }
 
     if (!toAddress) {
       // Lead was deleted between claim and send
@@ -194,7 +242,6 @@ export async function GET(request: NextRequest) {
             // until a real POST /unsubscribe endpoint exists — advertising it
             // without a handler would cause mail client errors.
             // TODO: add List-Unsubscribe-Post once T6.7/unsubscribe endpoint lands.
-            // TODO: add per-lead suppression check before send (acceptable omission at v1 volume).
             "List-Unsubscribe": `<mailto:${unsubscribeEmail}?subject=unsubscribe>`,
           },
         },
