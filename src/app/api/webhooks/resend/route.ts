@@ -176,6 +176,12 @@ export async function POST(request: NextRequest) {
         .neq("status", "replied"),
     );
 
+    // Stop-on-terminal: cancel this lead's pending follow-ups (scoped to
+    // status='scheduled' → idempotent, never touches sent/sending rows).
+    writes.push(
+      supabase.from("emails").update({ status: "cancelled" }).eq("lead_id", leadId).eq("status", "scheduled"),
+    );
+
     // ── Suppression: permanent bounce or spam complaint → never send again ────
     const recipient = (event.data as { to?: string[] }).to?.[0];
     const bounceType = (event.data as { bounce?: { type?: string } }).bounce?.type;
